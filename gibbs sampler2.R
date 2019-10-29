@@ -1,8 +1,18 @@
-cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibbs,nburn){
+cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibbs){
+  
+  #priors
+  a.theta3=b.theta3=0.1
+  psi=0.01
+  gamma1=0.1
+  
+  #basic settings
+  nburn=ngibbs/2
+  
+  
   ind=grep('TA',colnames(dat)); l1=length(ind); y1=data.matrix(dat[,ind])
   ind=grep('SL',colnames(dat)); l2=length(ind); y2=data.matrix(dat[,ind])
   n.tsegm=nrow(dat)
-  y3=matrix(dat[,'TAA'],n.tsegm,1)
+  y3=matrix(dat[,'TAA.1'],n.tsegm,1)
   n=apply(y2,1,sum)
   
   #general settings
