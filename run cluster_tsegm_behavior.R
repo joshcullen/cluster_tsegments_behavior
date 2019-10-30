@@ -1,10 +1,9 @@
 # rm(list=ls(all=TRUE))
 library('MCMCpack')
+library('Rcpp')
 set.seed(1)
 
 #get functions
-setwd('U:\\GIT_models\\cluster_tsegments_behavior')
-library('Rcpp')
 sourceCpp('aux1.cpp')
 source('gibbs functions.R')
 source('gibbs sampler.R')

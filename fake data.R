@@ -1,7 +1,7 @@
 rm(list=ls(all=TRUE))
 set.seed(3)
 
-#basic settings
+#basic settings; l1 = # bins for TA; l2 = # bins for SL
 nclust=8
 l1=8; l2=6
 n.tsegm=200
