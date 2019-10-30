@@ -43,6 +43,13 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
     }
     
     #draw samples from FCD's
+    z=sample.z(y1=y1,y2=y2,y3=y3,n=n,
+               ltheta1=log(theta1),ltheta2=log(theta2),ltheta3=log(theta3),l.1minus.theta3=log(1-theta3),
+               lphi=log(phi),z=z,
+               n.tsegm=n.tsegm,nclustmax=nclustmax,l1=l1,l2=l2,
+               a.theta3=a.theta3,b.theta3=b.theta3,psi=psi)
+    # z=z.true
+    
     v=sample.v(z=z,nclustmax=nclustmax,gamma1=gamma1)
     phi=GetPhi(vec=c(v,1),nclustmax=nclustmax)
     
@@ -58,14 +65,7 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
     theta3[theta3<lo]=lo #to avoid numerical issues
     theta3[theta3>hi]=hi #to avoid numerical issues
     # theta3=theta3.true
-    
-    z=sample.z(y1=y1,y2=y2,y3=y3,n=n,
-               ltheta1=log(theta1),ltheta2=log(theta2),ltheta3=log(theta3),l.1minus.theta3=log(1-theta3),
-               lphi=log(phi),z=z,
-               n.tsegm=n.tsegm,nclustmax=nclustmax,l1=l1,l2=l2,
-               a.theta3=a.theta3,b.theta3=b.theta3,psi=psi)
-    # z=z.true
-    
+
     #get logl
     logl=sum(y1*log(theta1)[z,])+
       sum(y2*log(theta2)[z,])+
