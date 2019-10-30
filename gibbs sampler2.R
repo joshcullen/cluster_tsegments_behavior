@@ -8,7 +8,7 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
   #basic settings
   nburn=ngibbs/2
   
-  
+  #### CHANGE BACK TO ORIGINAL COLUMN NAMES (Y1, Y2, Y3)
   ind=grep('TA',colnames(dat)); l1=length(ind); y1=data.matrix(dat[,ind])
   ind=grep('SL',colnames(dat)); l2=length(ind); y2=data.matrix(dat[,ind])
   n.tsegm=nrow(dat)
