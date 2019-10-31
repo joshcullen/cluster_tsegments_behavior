@@ -36,7 +36,7 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
   
   #gibbs sampler
   for (i in 1:ngibbs){
-    print(i)
+    pb$tick()  #create progress bar
     
     #occasionally re-order this
     if (i<nburn & i%%50==0){

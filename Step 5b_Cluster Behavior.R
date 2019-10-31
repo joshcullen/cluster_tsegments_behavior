@@ -5,6 +5,7 @@ library('MCMCpack')
 library(dplyr)
 library(purrr)
 library(tidyr) #for gather function
+library(ggplot2)
 library(ggnewscale) #for multiple fill scales in ggplot2
 library(pals) # for more color palettes
 library(progress) #for progress bar
@@ -22,56 +23,56 @@ obs<- get.summary.stats_behav(dat)
 obs.list<- df.to.list(obs)
 
 
-#################################
-#### Run Gibbs Sampler by ID ####
-#################################
+#####################################################
+#### Run Gibbs Sampler on All IDs Simultaneously ####
+#####################################################
 
 #basic settings
 ngibbs=1000
-nclustmax=6
+nclustmax=5
 
 
-
-## ID 1 ##
 
 #progress bar
 pb <- progress_bar$new(
   format = " iteration (:current/:total) [:bar] :percent [Elapsed: :elapsed, Remaining: :eta]",
   total = ngibbs, clear = FALSE, width= 100)
 
-dat1.res=cluster.tsegm.behavior(dat=obs.list$`1`[,-1],a.theta3=a.theta3,b.theta3=b.theta3,psi=psi,
+# Run Gibbs sampler
+res=cluster.tsegm.behavior(dat=obs[,-1],a.theta3=a.theta3,b.theta3=b.theta3,psi=psi,
                                 gamma1=gamma1,nclustmax=nclustmax,ngibbs=ngibbs)
 
-plot(dat1.res$loglikel,type='l')
-plot(dat1.res$phi[ngibbs,],type='h')
+plot(res$loglikel,type='l')
+plot(res$phi[ngibbs,],type='h')
+
+#Find MAP value for assignment of clusters
+MAP<- which(res$loglikel==max(res$loglikel))  # iteration 748
+tbsp.clust<- res$z[MAP,]
+table(tbsp.clust)
+
+#Create DF of clusters by behavioral time segment
+behav.seg<- 1:nrow(obs)
+tbsp.clust<- cbind(tbsp.clust,behav.seg) %>% data.frame()
 
 
-MAP1<- which(dat1.res$loglikel==max(dat1.res$loglikel))  # iteration 581 of MAP
-tbsp.clust1<- dat1.res$z[MAP1,]
-table(tbsp.clust1)
 
-time.seg<- 1:nrow(obs.list$`1`)
-tbsp.clust1<- cbind(tbsp.clust1,time.seg) %>% data.frame()
-dat.list$`1`<- left_join(dat.list$`1`, tbsp.clust1, by="time.seg")  #### ADD TIME.SEG TO DAT
 
 
 ## Plot heatmap of clusters
 
 #format data
-colnames(obs.list$`1`)[-1]=1:ncol(obs.list$`1`[,-1]) %>% as.character()
-nobs=nrow(obs.list$`1`)
-nloc=ncol(obs.list$`1`[,-1])
-obs1.long<- obs.list$`1`[,-1] %>% data.frame() %>% gather(key, value) %>% mutate(time=rep(1:nobs, times=nloc))
-obs1.long$key<- as.factor(obs1.long$key)
-levels(obs1.long$key)<- 1:nloc
-obs1.long$key<- as.numeric(obs1.long$key)
+nobs=nrow(obs)
+nloc=ncol(obs[,-1])
+obs.long<- obs[,-1] %>% data.frame() %>% gather(key, value) %>%
+           mutate(time=rep(tbsp.clust$behav.seg, times=nloc))
+obs.long$key<- as.factor(obs.long$key)
 
-tbsp.clust1[,1]<- tbsp.clust1[,1] %>% as.numeric()
-tbsp.clust1[,2]<- tbsp.clust1[,2] %>% as.numeric()
+tbsp.clust[,1]<- tbsp.clust[,1] %>% as.numeric()
+tbsp.clust[,2]<- tbsp.clust[,2] %>% as.numeric()
 
 
 #generate boxes denoting clusters
-rect.lims<- rle(tbsp.clust1$tbsp.clust1)
+rect.lims<- rle(tbsp.clust$tbsp.clust)
 rect.lims$lengths<- cumsum(rect.lims$lengths)+0.5
 rect.lims$lengths<- c(0.5, rect.lims$lengths)
 
@@ -79,88 +80,66 @@ rect.lims.new<- matrix(0, length(rect.lims$values), 3)
 for (i  in 2:length(rect.lims$lengths)) {
   rect.lims.new[i-1,]<- c(rect.lims$lengths[i-1], rect.lims$lengths[i], rect.lims$values[i-1])
 }
-colnames(rect.lims.new)<- c("xmin","xmax","tbsp.clust1")
+colnames(rect.lims.new)<- c("xmin","xmax","tbsp.clust")
 rect.lims.new<- data.frame(rect.lims.new)
+
+
+#generate boxes denoting IDs
+id.rect<- rle(obs$id)
+id.rect$lengths<- cumsum(id.rect$lengths) + 0.5
+id.rect$lengths<- c(0.5, id.rect$lengths)
+
+id.rect.new<- matrix(0, length(id.rect$values), 3)
+for (i  in 2:length(id.rect$lengths)) {
+  id.rect.new[i-1,]<- c(id.rect$lengths[i-1], id.rect$lengths[i], id.rect$values[i-1])
+}
+colnames(id.rect.new)<- c("xmin","xmax","id")
+id.rect.new<- data.frame(id.rect.new)
+id.rect.new$id<- as.factor(id.rect.new$id)
+
 
 #plot
 ggplot() +
-  geom_tile(data=obs1.long, aes(x=time, y=key, fill=log10(value+1))) +
+  geom_tile(data=obs.long, aes(x=time, y=key, fill=log10(value+1))) +
   scale_fill_viridis_c("log10(N+1)") +
-  scale_y_continuous(expand = c(0,0)) +
+  scale_y_discrete(expand = c(0,0)) +
   scale_x_continuous(expand = c(0,0)) +
   new_scale_fill() +
   geom_vline(data = rect.lims.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims.new, aes(xmin = xmin, xmax = xmax, ymin = max(obs1.long$key) + 0.5,
-                                    ymax = max(obs1.long$key) + 0.75, fill = tbsp.clust1),
-            color = NA, size = 1.5) +
+  geom_rect(data=rect.lims.new, aes(xmin = xmin, xmax = xmax,
+                                    ymin = max(as.integer(obs.long$key)) + 0.5,
+                                    ymax = max(as.integer(obs.long$key)) + 1,
+                                    fill = tbsp.clust), color = NA, size = 1.5) +
   scale_fill_gradientn("Time Cluster", colours = ocean.amp(6)) +
-  labs(x = "Time Segment", y = "Activity Center") +
+  new_scale_fill() +
+  geom_rect(data = id.rect.new, aes(xmin = xmin, xmax = xmax,
+                                    ymin = max(as.integer(obs.long$key)) + 1,
+                                    ymax = max(as.integer(obs.long$key)) + 1.5,
+                                    fill = id), color = NA, size = 1.5) +
+  scale_fill_viridis_d("ID", option = "plasma") +
+  labs(x = "Time Segment", y = "Behavior Profile") +
   theme_bw() +
   theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
 
 
 
 
-## ID 12 ##
+###################################
+#### Export Updated Data Frame ####
+###################################
+reps<- obs %>% group_by(id) %>% tally()
+for (i in 1:nrow(reps)) {
+  tmp<- seq(1, reps$n[i])
+  tbsp.clust$behav.seg[which(obs$id == reps$id[i])]<- tmp
+}
+tbsp.clust<- cbind(tbsp.clust, id = obs$id) %>% data.frame()
+ 
 
-pb <- progress_bar$new(
-  format = " iteration (:current/:total) [:bar] :percent [Elapsed: :elapsed, Remaining: :eta]",
-  total = ngibbs, clear = FALSE, width= 100)
+#Add cluster assignments to original data
+for (i in 1:length(dat.list)) {
+  tmp<- tbsp.clust %>% filter(id == unique(dat.list[[i]]$id)) %>% dplyr::select(-id)
+  dat.list[[i]]<- left_join(dat.list[[i]], tmp, by="behav.seg")
+}
 
-dat12.res=cluster.tsegm.behavior(dat=obs.list$`12`[,-1],a.theta3=a.theta3,b.theta3=b.theta3,psi=psi,
-                                gamma1=gamma1,nclustmax=nclustmax,ngibbs=ngibbs)
-
-plot(dat12.res$loglikel,type='l')
-plot(dat12.res$phi[ngibbs,],type='h')
-
-
-# MAP12<- which(dat12.res$loglikel==max(dat12.res$loglikel))  # iteration 128 of MAP
-MAP12<- dat12.res$loglikel %>% order(decreasing = T) %>% subset(. > 500) %>% first() #iteration 591
-tbsp.clust12<- dat12.res$z[MAP12,]
-table(tbsp.clust12)  
-
-
-
-
-## ID 19 ##
-
-pb <- progress_bar$new(
-  format = " iteration (:current/:total) [:bar] :percent [Elapsed: :elapsed, Remaining: :eta]",
-  total = ngibbs, clear = FALSE, width= 100)
-
-dat19.res=cluster.tsegm.behavior(dat=obs.list$`19`[,-1],a.theta3=a.theta3,b.theta3=b.theta3,psi=psi,
-                                 gamma1=gamma1,nclustmax=3,ngibbs=ngibbs)
-
-plot(dat19.res$loglikel,type='l')
-plot(dat19.res$phi[ngibbs,],type='h')
-
-
-MAP19<- which(dat19.res$loglikel==max(dat19.res$loglikel))  # iteration 838 of MAP
-tbsp.clust19<- dat19.res$z[MAP19,]
-table(tbsp.clust19)  # 3 clusters
-
-
-
-
-## ID 27 ##
-
-pb <- progress_bar$new(
-  format = " iteration (:current/:total) [:bar] :percent [Elapsed: :elapsed, Remaining: :eta]",
-  total = ngibbs, clear = FALSE, width= 100)
-
-dat27.res=cluster.tsegm.behavior(dat=obs.list$`27`[,-1],a.theta3=a.theta3,b.theta3=b.theta3,psi=psi,
-                                 gamma1=gamma1,nclustmax=2,ngibbs=ngibbs)
-
-plot(dat27.res$loglikel,type='l')
-plot(dat27.res$phi[ngibbs,],type='h')
-
-
-# MAP27<- which(dat27.res$loglikel==max(dat27.res$loglikel))  # iteration 1 & 300 of MAP
-# tbsp.clust27<- dat27.res$z[MAP27[2],]
-# table(tbsp.clust27)  # 2 clusters
-
-### APPEARS TO ONLY BE ASSOCIATED WITH A SINGLE CLUSTER
-
-
-
-#### All MAP values found before end of burn-in ####
+dat2<- map_dfr(dat.list, `[`)
+# write.csv(dat2, "Snail Kite Gridded Data_behavClust.csv", row.names = F)
