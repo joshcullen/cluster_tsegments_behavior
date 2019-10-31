@@ -25,25 +25,27 @@ get.summary.stats_behav=function(dat){  #dat must have time.seg assigned; for al
     ntseg=max(dat.ind$behav.seg)
     
     
-    #SL
-    SL<- matrix(0, ntseg, max(dat.ind$SL, na.rm = T))
-    colnames(SL)<- paste0("SL.",1:max(dat.ind$SL, na.rm = T))
-    for (j in 1:ntseg){
-      tmp<- dat.ind %>% filter(behav.seg == j) %>% dplyr::select(SL) %>% table()
-      SL[j,as.numeric(names(tmp))]<- tmp
-    }
-    
     #TA
     TA<- matrix(0, ntseg, max(dat.list[[i]]$TA, na.rm = T))
-    colnames(TA)<- paste0("TA.",1:max(dat.list[[i]]$TA, na.rm = T))
+    colnames(TA)<- paste0("y1.",1:max(dat.list[[i]]$TA, na.rm = T))
     for (j in 1:ntseg){
       tmp<- dat.list[[i]] %>% filter(behav.seg == j) %>% dplyr::select(TA) %>% table()
       TA[j,as.numeric(names(tmp))]<- tmp
     }
     
+    
+    #SL
+    SL<- matrix(0, ntseg, max(dat.ind$SL, na.rm = T))
+    colnames(SL)<- paste0("y2.",1:max(dat.ind$SL, na.rm = T))
+    for (j in 1:ntseg){
+      tmp<- dat.ind %>% filter(behav.seg == j) %>% dplyr::select(SL) %>% table()
+      SL[j,as.numeric(names(tmp))]<- tmp
+    }
+    
+    
     #TAA
     TAA<- matrix(0, ntseg, 1)
-    colnames(TAA)<- 'TAA.1'
+    colnames(TAA)<- 'y3'
     for (j in 1:ntseg){
       tmp<- dat.list[[i]] %>% filter(behav.seg == j) %>% dplyr::select(TAA) %>% table()
       tmp1<- tmp %>% data.frame() %>% filter(names(tmp) == 1) %>% dplyr::select(Freq) %>%

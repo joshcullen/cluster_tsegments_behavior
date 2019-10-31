@@ -8,11 +8,11 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
   #basic settings
   nburn=ngibbs/2
   
-  #### CHANGE BACK TO ORIGINAL COLUMN NAMES (Y1, Y2, Y3)
-  ind=grep('TA',colnames(dat)); l1=length(ind); y1=data.matrix(dat[,ind])
-  ind=grep('SL',colnames(dat)); l2=length(ind); y2=data.matrix(dat[,ind])
+  #index cols of appropriate var
+  ind=grep('y1',colnames(dat)); l1=length(ind); y1=data.matrix(dat[,ind])
+  ind=grep('y2',colnames(dat)); l2=length(ind); y2=data.matrix(dat[,ind])
   n.tsegm=nrow(dat)
-  y3=matrix(dat[,'TAA.1'],n.tsegm,1)
+  y3=matrix(dat[,'y3'],n.tsegm,1)
   n=apply(y2,1,sum)
   
   #general settings
@@ -53,6 +53,13 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
     }
     
     #draw samples from FCD's
+    z=sample.z(y1=y1,y2=y2,y3=y3,n=n,
+               ltheta1=log(theta1),ltheta2=log(theta2),ltheta3=log(theta3),l.1minus.theta3=log(1-theta3),
+               lphi=log(phi),z=z,
+               n.tsegm=n.tsegm,nclustmax=nclustmax,l1=l1,l2=l2,
+               a.theta3=a.theta3,b.theta3=b.theta3,psi=psi)
+    # z=z.true
+    
     v=sample.v(z=z,nclustmax=nclustmax,gamma1=gamma1)
     phi=GetPhi(vec=c(v,1),nclustmax=nclustmax)
     
@@ -68,13 +75,6 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
     theta3[theta3<lo]=lo #to avoid numerical issues
     theta3[theta3>hi]=hi #to avoid numerical issues
     # theta3=theta3.true
-    
-    z=sample.z(y1=y1,y2=y2,y3=y3,n=n,
-               ltheta1=log(theta1),ltheta2=log(theta2),ltheta3=log(theta3),l.1minus.theta3=log(1-theta3),
-               lphi=log(phi),z=z,
-               n.tsegm=n.tsegm,nclustmax=nclustmax,l1=l1,l2=l2,
-               a.theta3=a.theta3,b.theta3=b.theta3,psi=psi)
-    # z=z.true
     
     #get logl
     logl=sum(y1*log(theta1)[z,])+
