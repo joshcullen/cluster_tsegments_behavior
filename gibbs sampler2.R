@@ -8,7 +8,6 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
   #basic settings
   nburn=ngibbs/2
   
-  #index cols of appropriate var
   ind=grep('y1',colnames(dat)); l1=length(ind); y1=data.matrix(dat[,ind])
   ind=grep('y2',colnames(dat)); l2=length(ind); y2=data.matrix(dat[,ind])
   n.tsegm=nrow(dat)
@@ -62,13 +61,17 @@ cluster.tsegm.behavior=function(dat,a.theta3,b.theta3,psi,gamma1,nclustmax,ngibb
     
     v=sample.v(z=z,nclustmax=nclustmax,gamma1=gamma1)
     phi=GetPhi(vec=c(v,1),nclustmax=nclustmax)
+    phi[phi<lo]=lo #to avoid numerical issues
+    phi[phi>hi]=hi #to avoid numerical issues
     
     theta1=sample.theta1(y1=y1,nclustmax=nclustmax,l1=l1,z=z,psi=psi)
     theta1[theta1<lo]=lo #to avoid numerical issues
+    theta1[theta1>hi]=hi #to avoid numerical issues
     # theta1=theta1.true
     
     theta2=sample.theta2(y2=y2,nclustmax=nclustmax,l2=l2,z=z,psi=psi)
     theta2[theta2<lo]=lo #to avoid numerical issues
+    theta2[theta2>hi]=hi #to avoid numerical issues
     # theta2=theta2.true
     
     theta3=sample.theta3(y3=y3,n=n,nclustmax=nclustmax,z=z,a.theta3=a.theta3,b.theta3=b.theta3)
