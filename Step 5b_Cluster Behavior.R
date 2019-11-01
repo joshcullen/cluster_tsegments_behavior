@@ -9,6 +9,9 @@ library(ggplot2)
 library(ggnewscale) #for multiple fill scales in ggplot2
 library(pals) # for more color palettes
 library(progress) #for progress bar
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
 
 #get functions
 sourceCpp('aux1.cpp')
@@ -491,6 +494,150 @@ ggplot() +
 
 
 ## Show Proportion of Behaviors Associated with Each Time Segment (from posterior)
+
+#sample z's from posterior (after burn-in since log-likelihood converged)
+z.post<- res$z[501:ngibbs,]
+z.post.count<- matrix(0, ncol(z.post), nclustmax)
+tmp<-  apply(z.post, 2, table)
+for (i in 1:nrow(z.post.count)) {
+  z.post.count[i, as.integer(names(tmp[[i]]))]<- tmp[[i]]
+}
+
+#convert from count to proportion by time seg
+z.post.prop<- apply(z.post.count, 1, function(x) x/sum(x)) %>% t()
+colnames(z.post.prop)<- 1:5
+
+#convert to long form for plotting
+z.post.prop.time<- cbind(id = obs$id, z.post.prop) %>% data.frame() %>% slice(rep(1:n(), times = n))
+z.post.list<- df.to.list(z.post.prop.time) %>% lapply(function(x) x[!(names(x) %in% c("id"))])
+z.post.list.long<- lapply(z.post.list, function(x) {x %>% gather(key, value) %>%
+    mutate(time=rep(1:nrow(x), times=ncol(x)))})
+z.post.list.long<- lapply(z.post.list.long, function(x) {mutate_at(x, "key", as.factor)})
+
+
+
+# ID 1
+
+ggplot() +
+  geom_area(data=z.post.list.long[[1]], aes(x=time, y=value, fill=key)) +
+  scale_fill_viridis_d("Behavior") +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_continuous(expand = c(0,0)) +
+  labs(x = "Time", y = "Proportion of Behavior", title = "ID 1") +
+  theme_bw() +
+  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
+
+
+# ID 12
+
+ggplot() +
+  geom_area(data=z.post.list.long[[2]], aes(x=time, y=value, fill=key)) +
+  scale_fill_viridis_d("Behavior") +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_continuous(expand = c(0,0)) +
+  labs(x = "Time", y = "Proportion of Behavior", title = "ID 12") +
+  theme_bw() +
+  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
+
+
+# ID 19
+
+ggplot() +
+  geom_area(data=z.post.list.long[[3]], aes(x=time, y=value, fill=key)) +
+  scale_fill_viridis_d("Behavior") +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_continuous(expand = c(0,0)) +
+  labs(x = "Time", y = "Proportion of Behavior", title = "ID 19") +
+  theme_bw() +
+  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
+
+
+# ID 27
+
+ggplot() +
+  geom_area(data=z.post.list.long[[4]], aes(x=time, y=value, fill=key)) +
+  scale_fill_viridis_d("Behavior") +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_x_continuous(expand = c(0,0)) +
+  labs(x = "Time", y = "Proportion of Behavior", title = "ID 27") +
+  theme_bw() +
+  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
+
+
+
+
+
+
+
+
+## Generate Geographic Maps with Pts Assigned a Behavior (from MAP estimate)
+
+#load map data
+usa <- ne_states(country = "United States of America", returnclass = "sf")
+fl<- usa %>% filter(name == "Florida")
+fl<- st_transform(fl, crs = "+init=epsg:32617") #change projection to UTM 17N
+
+
+# ID 1
+
+behav.1<- tbsp.clust.time[tbsp.clust.time$id == 1, "tbsp.clust"]
+
+ggplot() +
+  geom_sf(data = fl) +
+  coord_sf(xlim = c(min(dat$utmlong-120000), max(dat$utmlong+40000)),
+           ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
+  geom_path(data = dat.list$`1`, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
+  geom_point(data = dat.list$`1`, aes(utmlong, utmlat, color=behav.1), size=1) +
+  scale_color_viridis_c("Behavior") +
+  labs(x = "Longitude", y = "Latitude", title = "ID 1") +
+  theme_bw()
+
+
+# ID 12
+
+behav.12<- tbsp.clust.time[tbsp.clust.time$id == 12, "tbsp.clust"]
+
+ggplot() +
+  geom_sf(data = fl) +
+  coord_sf(xlim = c(min(dat$utmlong-120000), max(dat$utmlong+40000)),
+           ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
+  geom_path(data = dat.list$`12`, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
+  geom_point(data = dat.list$`12`, aes(utmlong, utmlat, color=behav.12), size=1) +
+  scale_color_viridis_c("Behavior") +
+  labs(x = "Longitude", y = "Latitude", title = "ID 12") +
+  theme_bw()
+
+
+# ID 19
+
+behav.19<- tbsp.clust.time[tbsp.clust.time$id == 19, "tbsp.clust"]
+
+ggplot() +
+  geom_sf(data = fl) +
+  coord_sf(xlim = c(min(dat$utmlong-120000), max(dat$utmlong+40000)),
+           ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
+  geom_path(data = dat.list$`19`, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
+  geom_point(data = dat.list$`19`, aes(utmlong, utmlat, color=behav.19), size=1) +
+  scale_color_viridis_c("Behavior") +
+  labs(x = "Longitude", y = "Latitude", title = "ID 19") +
+  theme_bw()
+
+
+# ID 27
+
+behav.27<- tbsp.clust.time[tbsp.clust.time$id == 27, "tbsp.clust"]
+
+ggplot() +
+  geom_sf(data = fl) +
+  coord_sf(xlim = c(min(dat$utmlong-120000), max(dat$utmlong+40000)),
+           ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
+  geom_path(data = dat.list$`27`, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
+  geom_point(data = dat.list$`27`, aes(utmlong, utmlat, color=behav.27), size=1) +
+  scale_color_viridis_c("Behavior") +
+  labs(x = "Longitude", y = "Latitude", title = "ID 27") +
+  theme_bw()
+
+
 
 
 
