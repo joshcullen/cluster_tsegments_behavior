@@ -12,6 +12,9 @@ library(progress) #for progress bar
 library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
+library(reshape2)
+library(stringr)
+library(lubridate)
 
 #get functions
 sourceCpp('aux1.cpp')
@@ -49,7 +52,7 @@ plot(res$loglikel,type='l')
 plot(res$phi[ngibbs,],type='h')
 
 #Find MAP value for assignment of clusters
-MAP<- which(res$loglikel==max(res$loglikel))  # iteration 711
+MAP<- which(res$loglikel==max(res$loglikel))  # iteration 711 (756 for 4 clust; 693 for 3 clust)
 tbsp.clust<- res$z[MAP,]
 table(tbsp.clust)
 
@@ -63,73 +66,6 @@ tbsp.clust<- cbind(tbsp.clust,behav.seg) %>% data.frame()
 #####################
 #### Plot output ####
 #####################
-
-
-## All IDs Clustered by Time Segment
-#format data
-nobs=nrow(obs)
-nloc=ncol(obs[,-1])
-obs.long<- obs[,-1] %>% data.frame() %>% gather(key, value) %>%
-           mutate(behav.seg=rep(tbsp.clust$behav.seg, times=nloc))
-obs.long$key<- as.factor(obs.long$key)
-
-tbsp.clust[,1]<- tbsp.clust[,1] %>% as.numeric()
-tbsp.clust[,2]<- tbsp.clust[,2] %>% as.numeric()
-
-
-#generate boxes denoting clusters
-rect.lims<- rle(tbsp.clust$tbsp.clust)
-rect.lims$lengths<- cumsum(rect.lims$lengths)+0.5
-rect.lims$lengths<- c(0.5, rect.lims$lengths)
-
-rect.lims.new<- matrix(0, length(rect.lims$values), 3)
-for (i  in 2:length(rect.lims$lengths)) {
-  rect.lims.new[i-1,]<- c(rect.lims$lengths[i-1], rect.lims$lengths[i], rect.lims$values[i-1])
-}
-colnames(rect.lims.new)<- c("xmin","xmax","tbsp.clust")
-rect.lims.new<- data.frame(rect.lims.new)
-
-
-#generate boxes denoting IDs
-id.rect<- rle(obs$id)
-id.rect$lengths<- cumsum(id.rect$lengths) + 0.5
-id.rect$lengths<- c(0.5, id.rect$lengths)
-
-id.rect.new<- matrix(0, length(id.rect$values), 3)
-for (i  in 2:length(id.rect$lengths)) {
-  id.rect.new[i-1,]<- c(id.rect$lengths[i-1], id.rect$lengths[i], id.rect$values[i-1])
-}
-colnames(id.rect.new)<- c("xmin","xmax","id")
-id.rect.new<- data.frame(id.rect.new)
-id.rect.new$id<- as.factor(id.rect.new$id)
-
-
-#plot
-ggplot() +
-  geom_tile(data=obs.long, aes(x=behav.seg, y=key, fill=log10(value+1))) +
-  scale_fill_viridis_c("log10(N+1)") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  geom_vline(data = rect.lims.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims.new, aes(xmin = xmin, xmax = xmax,
-                                    ymin = max(as.integer(obs.long$key)) + 0.5,
-                                    ymax = max(as.integer(obs.long$key)) + 1,
-                                    fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Time Cluster", colours = ocean.amp(6)) +
-  new_scale_fill() +
-  geom_rect(data = id.rect.new, aes(xmin = xmin, xmax = xmax,
-                                    ymin = max(as.integer(obs.long$key)) + 1,
-                                    ymax = max(as.integer(obs.long$key)) + 1.5,
-                                    fill = id), color = NA, size = 1.5) +
-  scale_fill_viridis_d("ID", option = "plasma") +
-  labs(x = "Time Segment", y = "Behavior Profile") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
-
-
 
 
 ## Separate by Behavior to Compare Distribs (Using Proportions) Over Time
@@ -243,8 +179,7 @@ tbsp.clust.time<- tbsp.clust %>% slice(rep(1:n(), times = n)) %>%
   mutate(time = time[,1]) %>% mutate(id = dat$id)
 
 
-
-# ID 1
+# Example of proportions using ID 1
 
 #generate boxes denoting clusters
 rect.lims1<- rle(tbsp.clust.time[tbsp.clust.time$id == 1, "tbsp.clust"])
@@ -257,6 +192,10 @@ for (i  in 2:length(rect.lims1$lengths)) {
 }
 colnames(rect.lims1.new)<- c("xmin","xmax","tbsp.clust")
 rect.lims1.new<- data.frame(rect.lims1.new)
+rect.lims1.new$tbsp.clust<- factor(rect.lims1.new$tbsp.clust,
+                                   labels = c("Transit","Exploratory","Resting","ARS","Resting2"))
+rect.lims1.new$tbsp.clust<- factor(rect.lims1.new$tbsp.clust,
+                                   levels(rect.lims1.new$tbsp.clust)[c(1:2,4:5,3)], ordered = T)
 
 
 ggplot() +
@@ -270,119 +209,59 @@ ggplot() +
                                     ymin = max(as.integer(obs.prop.list.long[[1]]$key)) + 0.5,
                                     ymax = max(as.integer(obs.prop.list.long[[1]]$key)) + 1,
                                     fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Behavior", colours = ocean.amp(6)) +
+  scale_fill_manual("Behavior", values = ocean.amp(5)) +
   geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
   labs(x = "Time", y = "Behavior Profile") +
   theme_bw() +
   theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
 
 
-# ID 12
-
-#generate boxes denoting clusters
-rect.lims12<- rle(tbsp.clust.time[tbsp.clust.time$id == 12, "tbsp.clust"])
-rect.lims12$lengths<- cumsum(rect.lims12$lengths)+0.5
-rect.lims12$lengths<- c(0.5, rect.lims12$lengths)
-
-rect.lims12.new<- matrix(0, length(rect.lims12$values), 3)
-for (i  in 2:length(rect.lims12$lengths)) {
-  rect.lims12.new[i-1,]<- c(rect.lims12$lengths[i-1], rect.lims12$lengths[i],
-                            rect.lims12$values[i-1])
-}
-colnames(rect.lims12.new)<- c("xmin","xmax","tbsp.clust")
-rect.lims12.new<- data.frame(rect.lims12.new)
 
 
+
+# All IDs
+
+tbsp.clust.time$tbsp.clust<- factor(tbsp.clust.time$tbsp.clust,
+                                    labels = c("Transit","Exploratory","Resting","ARS","Resting2"))
+tbsp.clust.time$tbsp.clust<- factor(tbsp.clust.time$tbsp.clust,
+                                    levels(tbsp.clust.time$tbsp.clust)[c(1:2,4:5,3)], ordered = T)
+tbsp.clust.time$id<- factor(tbsp.clust.time$id)
+tbsp.clust.time$date<- dat$ESTtime %>% as_datetime()
+
+#Window of peak breeding (March 1 - June 30)
+breed<- data.frame(xmin = as_datetime(c("2016-03-01 00:00:00","2017-03-01 00:00:00",
+                                        "2018-03-01 00:00:00","2019-03-01 00:00:00")),
+                   xmax = as_datetime(c("2016-06-30 23:59:59","2017-06-30 23:59:59",
+                                        "2018-06-30 23:59:59","2019-06-30 23:59:59")),
+                   ymin = -Inf, ymax = Inf)
+
+#Aligned by first observation
 ggplot() +
-  geom_tile(data=obs.prop.list.long[[2]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
+  geom_tile(data=tbsp.clust.time, aes(x=time, y=id, fill=tbsp.clust)) +
+  scale_fill_viridis_d("Behavior", direction = -1) +
   scale_y_discrete(expand = c(0,0)) +
   scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims12.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims12.new, aes(xmin = xmin, xmax = xmax,
-                                     ymin = max(as.integer(obs.prop.list.long[[2]]$key)) + 0.5,
-                                     ymax = max(as.integer(obs.prop.list.long[[2]]$key)) + 1,
-                                     fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Behavior", colours = ocean.amp(6)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile") +
+  labs(x = "Time", y = "ID") +
   theme_bw() +
   theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
 
 
-# ID 19
-
-#generate boxes denoting clusters
-rect.lims19<- rle(tbsp.clust.time[tbsp.clust.time$id == 19, "tbsp.clust"])
-rect.lims19$lengths<- cumsum(rect.lims19$lengths)+0.5
-rect.lims19$lengths<- c(0.5, rect.lims19$lengths)
-
-rect.lims19.new<- matrix(0, length(rect.lims19$values), 3)
-for (i  in 2:length(rect.lims19$lengths)) {
-  rect.lims19.new[i-1,]<- c(rect.lims19$lengths[i-1], rect.lims19$lengths[i],
-                            rect.lims19$values[i-1])
-}
-colnames(rect.lims19.new)<- c("xmin","xmax","tbsp.clust")
-rect.lims19.new<- data.frame(rect.lims19.new)
-
-
+#Aligned by date
 ggplot() +
-  geom_tile(data=obs.prop.list.long[[3]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
+  geom_rect(data = breed, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            fill = "grey", alpha = 0.5) +
+  geom_tile(data=tbsp.clust.time, aes(x=date, y=id, fill=tbsp.clust)) +
+  scale_fill_viridis_d("Behavior", direction = -1) +
   scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims19.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims19.new, aes(xmin = xmin, xmax = xmax,
-                                      ymin = max(as.integer(obs.prop.list.long[[3]]$key)) + 0.5,
-                                      ymax = max(as.integer(obs.prop.list.long[[3]]$key)) + 1,
-                                      fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Behavior", colours = ocean.amp(6)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
-# ID 27
-
-#generate boxes denoting clusters
-rect.lims27<- rle(tbsp.clust.time[tbsp.clust.time$id == 27, "tbsp.clust"])
-rect.lims27$lengths<- cumsum(rect.lims27$lengths)+0.5
-rect.lims27$lengths<- c(0.5, rect.lims27$lengths)
-
-rect.lims27.new<- matrix(0, length(rect.lims27$values), 3)
-for (i  in 2:length(rect.lims27$lengths)) {
-  rect.lims27.new[i-1,]<- c(rect.lims27$lengths[i-1], rect.lims27$lengths[i],
-                            rect.lims27$values[i-1])
-}
-colnames(rect.lims27.new)<- c("xmin","xmax","tbsp.clust")
-rect.lims27.new<- data.frame(rect.lims27.new)
-
-
-ggplot() +
-  geom_tile(data=obs.prop.list.long[[4]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims27.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims27.new, aes(xmin = xmin, xmax = xmax,
-                                      ymin = max(as.integer(obs.prop.list.long[[4]]$key)) + 0.5,
-                                      ymax = max(as.integer(obs.prop.list.long[[4]]$key)) + 1,
-                                      fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Behavior", colours = ocean.amp(6)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile") +
+  scale_x_datetime(expand = c(0,0)) +
+  labs(x = "Time", y = "ID") +
   theme_bw() +
   theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
 
 
 
 
-
-## Separate by ID Showing Time Series of Thetas (not raw proportions)
+## Separate Histograms of Thetas (not raw proportions) by Behavior
 
 #take mean of posterior theta estimates (after nburn since log likelihood converged)
 theta1.post<- res$theta1[501:ngibbs,] %>% apply(2, mean)
@@ -398,97 +277,24 @@ colnames(theta2)=paste0('theta2.',1:ncol(y2))
 colnames(theta3)='theta3'
 
 theta<- cbind(tbsp.clust = 1:5, theta1, theta2, theta3) %>% data.frame()
-obs.theta.time<- left_join(tbsp.clust.time, theta, by = "tbsp.clust")
+theta$tbsp.clust<- factor(theta$tbsp.clust,
+                          labels = c("Transit","Exploratory","Resting","ARS","Resting2"))
+theta$tbsp.clust<- factor(theta$tbsp.clust, levels(theta$tbsp.clust)[c(1:2,4:5,3)], ordered = T)
+theta<- melt(theta, "tbsp.clust")
+theta<- theta %>% mutate(param = ifelse(str_detect(theta$variable, "theta1"), "TA",
+                                    ifelse(str_detect(theta$variable, "theta2"), "SL", "TAA")))
 
-
-#format data
-obs.theta.list<- df.to.list(obs.theta.time) %>% lapply(function(x) x[!(names(x) %in% c("tbsp.clust","behav.seg","time","id"))])
-obs.theta.list.long<- lapply(obs.theta.list, function(x) {x %>% gather(key, value) %>%
-    mutate(time=rep(1:nrow(x), times=ncol(x)))})
-obs.theta.list.long<- lapply(obs.theta.list.long, function(x) {mutate_at(x, "key", as.factor)})
-
-
-
-# ID 1
-
-ggplot() +
-  geom_tile(data=obs.theta.list.long[[1]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims1.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims1.new, aes(xmin = xmin, xmax = xmax,
-                                     ymin = max(as.integer(obs.theta.list.long[[1]]$key)) + 0.5,
-                                     ymax = max(as.integer(obs.theta.list.long[[1]]$key)) + 1,
-                                     fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Behavior", colours = ocean.amp(6)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile", title = "ID 1") +
+ggplot(theta, aes(x = variable, y = value, fill = tbsp.clust)) +
+  geom_bar(stat = 'identity') +
+  scale_fill_viridis_d(guide = F, direction = -1) +
+  labs(x = "Bin", y = "Proportion") +
   theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
-# ID 12
-
-ggplot() +
-  geom_tile(data=obs.theta.list.long[[2]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims12.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims12.new, aes(xmin = xmin, xmax = xmax,
-                                      ymin = max(as.integer(obs.theta.list.long[[2]]$key)) + 0.5,
-                                      ymax = max(as.integer(obs.theta.list.long[[2]]$key)) + 1,
-                                      fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Behavior", colours = ocean.amp(6)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile", title = "ID 12") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
-# ID 19
-
-ggplot() +
-  geom_tile(data=obs.theta.list.long[[3]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims19.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims19.new, aes(xmin = xmin, xmax = xmax,
-                                      ymin = max(as.integer(obs.theta.list.long[[3]]$key)) + 0.5,
-                                      ymax = max(as.integer(obs.theta.list.long[[3]]$key)) + 1,
-                                      fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Behavior", colours = ocean.amp(6)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile", title = "ID 19") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
-# ID 27
-
-ggplot() +
-  geom_tile(data=obs.theta.list.long[[4]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims27.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims27.new, aes(xmin = xmin, xmax = xmax,
-                                      ymin = max(as.integer(obs.theta.list.long[[4]]$key)) + 0.5,
-                                      ymax = max(as.integer(obs.theta.list.long[[4]]$key)) + 1,
-                                      fill = tbsp.clust), color = NA, size = 1.5) +
-  scale_fill_gradientn("Behavior", colours = ocean.amp(6)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile", title = "ID 27") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
+  theme(axis.title = element_text(size = 16), axis.text.y = element_text(size = 14),
+        axis.text.x.bottom = element_text(size = 12),
+        strip.text = element_text(size = 14), strip.text.x = element_text(face = "bold"),
+        axis.text.x = element_text(angle = 90)) +
+  facet_grid(param ~ tbsp.clust, scales = "free_y")
+  
 
 
 
@@ -516,54 +322,16 @@ z.post.list.long<- lapply(z.post.list.long, function(x) {mutate_at(x, "key", as.
 
 
 
-# ID 1
+# ID 1 as example
 
 ggplot() +
   geom_area(data=z.post.list.long[[1]], aes(x=time, y=value, fill=key)) +
-  scale_fill_viridis_d("Behavior") +
+  scale_fill_viridis_d("Behavior", direction = -1) +
   scale_y_continuous(expand = c(0,0)) +
   scale_x_continuous(expand = c(0,0)) +
   labs(x = "Time", y = "Proportion of Behavior", title = "ID 1") +
   theme_bw() +
   theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
-# ID 12
-
-ggplot() +
-  geom_area(data=z.post.list.long[[2]], aes(x=time, y=value, fill=key)) +
-  scale_fill_viridis_d("Behavior") +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  labs(x = "Time", y = "Proportion of Behavior", title = "ID 12") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
-# ID 19
-
-ggplot() +
-  geom_area(data=z.post.list.long[[3]], aes(x=time, y=value, fill=key)) +
-  scale_fill_viridis_d("Behavior") +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  labs(x = "Time", y = "Proportion of Behavior", title = "ID 19") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
-# ID 27
-
-ggplot() +
-  geom_area(data=z.post.list.long[[4]], aes(x=time, y=value, fill=key)) +
-  scale_fill_viridis_d("Behavior") +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  labs(x = "Time", y = "Proportion of Behavior", title = "ID 27") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-
-
 
 
 
@@ -580,60 +348,60 @@ fl<- st_transform(fl, crs = "+init=epsg:32617") #change projection to UTM 17N
 
 # ID 1
 
-behav.1<- tbsp.clust.time[tbsp.clust.time$id == 1, "tbsp.clust"]
+dat.list$`1`$behav<- tbsp.clust.time[tbsp.clust.time$id == 1, "tbsp.clust"]
 
 ggplot() +
   geom_sf(data = fl) +
   coord_sf(xlim = c(min(dat$utmlong-120000), max(dat$utmlong+40000)),
            ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
   geom_path(data = dat.list$`1`, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
-  geom_point(data = dat.list$`1`, aes(utmlong, utmlat, color=behav.1), size=1) +
-  scale_color_viridis_c("Behavior") +
+  geom_point(data = dat.list$`1`, aes(utmlong, utmlat, color=behav), size=1) +
+  scale_color_viridis_d("Behavior", direction = -1) +
   labs(x = "Longitude", y = "Latitude", title = "ID 1") +
   theme_bw()
 
 
 # ID 12
 
-behav.12<- tbsp.clust.time[tbsp.clust.time$id == 12, "tbsp.clust"]
+dat.list$`12`$behav<- tbsp.clust.time[tbsp.clust.time$id == 12, "tbsp.clust"]
 
 ggplot() +
   geom_sf(data = fl) +
   coord_sf(xlim = c(min(dat$utmlong-120000), max(dat$utmlong+40000)),
            ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
   geom_path(data = dat.list$`12`, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
-  geom_point(data = dat.list$`12`, aes(utmlong, utmlat, color=behav.12), size=1) +
-  scale_color_viridis_c("Behavior") +
+  geom_point(data = dat.list$`12`, aes(utmlong, utmlat, color=behav), size=1) +
+  scale_color_viridis_d("Behavior", direction = -1) +
   labs(x = "Longitude", y = "Latitude", title = "ID 12") +
   theme_bw()
 
 
 # ID 19
 
-behav.19<- tbsp.clust.time[tbsp.clust.time$id == 19, "tbsp.clust"]
+dat.list$`19`$behav<- tbsp.clust.time[tbsp.clust.time$id == 19, "tbsp.clust"]
 
 ggplot() +
   geom_sf(data = fl) +
   coord_sf(xlim = c(min(dat$utmlong-120000), max(dat$utmlong+40000)),
            ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
   geom_path(data = dat.list$`19`, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
-  geom_point(data = dat.list$`19`, aes(utmlong, utmlat, color=behav.19), size=1) +
-  scale_color_viridis_c("Behavior") +
+  geom_point(data = dat.list$`19`, aes(utmlong, utmlat, color=behav), size=1) +
+  scale_color_viridis_d("Behavior", direction = -1) +
   labs(x = "Longitude", y = "Latitude", title = "ID 19") +
   theme_bw()
 
 
 # ID 27
 
-behav.27<- tbsp.clust.time[tbsp.clust.time$id == 27, "tbsp.clust"]
+dat.list$`27`$behav<- tbsp.clust.time[tbsp.clust.time$id == 27, "tbsp.clust"]
 
 ggplot() +
   geom_sf(data = fl) +
   coord_sf(xlim = c(min(dat$utmlong-120000), max(dat$utmlong+40000)),
            ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
   geom_path(data = dat.list$`27`, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
-  geom_point(data = dat.list$`27`, aes(utmlong, utmlat, color=behav.27), size=1) +
-  scale_color_viridis_c("Behavior") +
+  geom_point(data = dat.list$`27`, aes(utmlong, utmlat, color=behav), size=1) +
+  scale_color_manual("Behavior", values = viridis(5)[c(3,1)]) +
   labs(x = "Longitude", y = "Latitude", title = "ID 27") +
   theme_bw()
 
