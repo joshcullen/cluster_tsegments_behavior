@@ -124,7 +124,7 @@ ggplot() +
   theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
 
 
-#plot b3 (Encamped, very low SL, TA near pi, intermediate TAA)
+#plot b3 (Resting/Encamped, very low SL, TA near pi, intermediate TAA)
 ggplot() +
   geom_tile(data=b3, aes(x=as.factor(behav.seg), y=key, fill=value)) +
   scale_fill_viridis_c("Proportion") +
@@ -147,7 +147,7 @@ ggplot() +
   theme_bw() +
   theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
 
-#plot b5 (ARS2?, mainly low SL, TA closer to pi, relatively high TAA)
+#plot b5 (Resting2?, mainly low SL, TA closer to pi, relatively high TAA)
 ggplot() +
   geom_tile(data=b5, aes(x=as.factor(behav.seg), y=key, fill=value)) +
   scale_fill_viridis_c("Proportion") +

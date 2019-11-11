@@ -13,16 +13,16 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 
 # Behavior Estimation
 
-Movement parameters (SL/TA/TAA) have been already used to delineate time segments of different behavioral patterns. This document displays the output of the subsequent stage: the clustering of behavioral time segments into behavioral states. While some of the components of the clustering model are flexible (e.g., setting the max number of behaviors) or may be ambiguous (e.g., attribution of behaviors to clusters of time segments), this model relies on the user experience with and knowledge of their study organism. Given prior knowledge about how the focal species moves within their environment, this *a priori* knowledge can be used to guide the assignment of latent behavioral states.
+Movement parameters (SL/TA/TAA) have already been used to delineate time segments of different behavioral patterns. This document displays the output of the subsequent stage: the clustering of behavioral time segments into behavioral states. While some of the components of the clustering model are flexible (e.g., setting the max number of behaviors) or may be ambiguous (e.g., attribution of behaviors to clusters of time segments), this model relies on the user's experience with and knowledge of their study organism. Given prior knowledge about how the focal species moves within their environment, this *a priori* knowledge can be used to guide the assignment of latent behavioral states.
 
-Output of behavioral assignment to time segments (as well as to the whole time series analyzed) will be visualized using multiple methods and components of the data to get a better sense of how the model has clustered time segments, the time series of behavioral changes per individual, and the probability that an organism is in each behavioral state by time segment.
+Output of behavioral assignment to time segments (as well as to the whole time series analyzed) will be visualized using multiple methods and components of the data to get a better sense of how the model has clustered time segments, the time series of behavior changes per individual, and the probability that an organism is in each behavioral state by time segment.
 
 
 ## Identifying behaviors
 
-As stated above, time segments were clustered by similar features of their multinomial (SL, TA) or bernoulli (TAA) distributions. An upper limit of 5 possible behaviors was set when running the model over 1000 iterations. Assuming the gibbs sampler converged after the burn-in period (500 iterations) as determined by the log likelihood asymptoting, the remaining 500 samples were purported to come from the posterior distribution. In some cases, all posterior samples were used in the analysis wheras in others only the maximum *a posteriori* (MAP) value was used to assign behavioral state.
+As stated above, time segments were clustered by similar features of their multinomial (SL, TA) or bernoulli (TAA) distributions. An upper limit of 5 possible behaviors was set when running the model over 1000 iterations. Assuming the Gibbs sampler converged after the burn-in period (500 iterations) as determined by an asymptote of the log likelihood, the remaining 500 samples were purported to come from the posterior distribution. In some cases, all posterior samples were used in the analysis, whereas in others only the maximum *a posteriori* (MAP) value was used to assign behavioral states.
 
-To get a sense of what behaviors were identified, heatmaps using all 64 time segments from all four individuals (**IDs 1, 12, 19, 27**) were plotted for each of the movement parameters. Filled values of these heatmaps represent the proportion of observations within a given time segment per movement parameter (SL, TA, TAA). TA is identified as 'y1' with bins 1-8, SL is identified as 'y2' with bins 1-6, and TAA is identified as 'y3' with a single bin representative of maintaining the same relative direction (positive or negative).  
+To get a sense of the behaviors identified, plots of the movement parameter distributions (SL/TA/TAA) are shown for each of the five behaviors. These behaviors are named according to likely movement based on these distributions. Labels on the x-axis (*theta1.x*,*theta2.x*,*theta3*) represent the bins for TA, SL, and TAA, respectively.
 \hfill\break
 
 ```{r load}
@@ -33,12 +33,14 @@ library(purrr)
 library(tidyr) #for gather function
 library(ggplot2)
 library(ggnewscale) #for multiple fill scales in ggplot2
-library(pals) # for more color palettes
 library(progress) #for progress bar
 library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
 library(cowplot)
+library(reshape2)
+library(stringr)
+library(lubridate)
 
 #get functions
 sourceCpp('aux1.cpp')
@@ -102,28 +104,14 @@ n<- apply(y2,1,sum)
 y3.prop<- y3/n
 
 obs.prop<- cbind(id = obs$id, y1.prop, y2.prop, y3 = y3.prop) %>% data.frame()
-
-
-#format data
-nobs=nrow(obs.prop)
-nloc=ncol(obs.prop[,-1])
-obs.prop.long<- obs.prop[,-1] %>% data.frame() %>% gather(key, value) %>%
-  mutate(behav.seg=rep(1:nobs, times=nloc))  #time is now obs #, not segment #
-obs.prop.long$key<- as.factor(obs.prop.long$key)
-
-
-#separate behavior DFs
-b<- left_join(obs.prop.long, tbsp.clust, by = "behav.seg")
-b1<- b %>% filter(tbsp.clust == 1)
-b2<- b %>% filter(tbsp.clust == 2)
-b3<- b %>% filter(tbsp.clust == 3)
-b4<- b %>% filter(tbsp.clust == 4)
-b5<- b %>% filter(tbsp.clust == 5)
 ```
-\hfill\break
+
 
 
 ```{r thetas}
+## Separate Histograms of Thetas (not raw proportions) by Behavior
+
+#take mean of posterior theta estimates (after nburn since log likelihood converged)
 theta1.post<- res$theta1[501:ngibbs,] %>% apply(2, mean)
 theta2.post<- res$theta2[501:ngibbs,] %>% apply(2, mean)
 theta3.post<- res$theta3[501:ngibbs,] %>% apply(2, mean)
@@ -136,254 +124,37 @@ colnames(theta1)=paste0('theta1.',1:ncol(y1))
 colnames(theta2)=paste0('theta2.',1:ncol(y2))
 colnames(theta3)='theta3'
 
-```
+theta<- cbind(tbsp.clust = 1:5, theta1, theta2, theta3) %>% data.frame()
+theta$tbsp.clust<- factor(theta$tbsp.clust,
+                          labels = c("Transit","Exploratory","Resting","ARS","Resting2"))
+theta$tbsp.clust<- factor(theta$tbsp.clust, levels(theta$tbsp.clust)[c(1:2,4:5,3)], ordered = T)
+theta<- melt(theta, "tbsp.clust")
+theta<- theta %>% mutate(param = ifelse(str_detect(theta$variable, "theta1"), "TA",
+                                    ifelse(str_detect(theta$variable, "theta2"), "SL", "TAA")))
 
-
-```{r}
-#plot b1 (Directed; large SL, TA near 0, high TAA)
-ggplot() +
-  geom_tile(data=b1, aes(x=as.factor(behav.seg), y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_discrete(expand = c(0,0)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5)), color = "white", size = 0.35) +
-  labs(x = "Time Segment", y = "Behavior Profile", title = "Behavior 1") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-```
-
-```{r}
-#plot distributions
-theta1.b1<- data.frame(value = theta1[1,])
-theta1.b1$bin<- 1:8
-theta2.b1<- data.frame(value = theta2[1,])
-theta2.b1$bin<- 1:6
-theta3.b1<- data.frame(value = c(1 - theta3[1,], theta3[1,]))
-theta3.b1$bin<- c("n0", "n1")
-
-ta1<- ggplot(data=theta1.b1, aes(x=bin, y=value)) +
+ggplot(theta, aes(x = variable, y = value, fill = tbsp.clust)) +
   geom_bar(stat = 'identity') +
-  labs(x = "TA bin", y = "Proportion") +
+  scale_fill_viridis_d(guide = F, direction = -1) +
+  labs(x = "Bin", y = "Proportion") +
   theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-sl1<- ggplot(data=theta2.b1, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "SL bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-taa1<- ggplot(data=theta3.b1, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TAA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-plot_grid(ta1, sl1, taa1, nrow = 1, labels = "")
+  theme(axis.title = element_text(size = 16), axis.text.y = element_text(size = 14),
+        axis.text.x.bottom = element_text(size = 12),
+        strip.text = element_text(size = 13), strip.text.x = element_text(face = "bold"),
+        axis.text.x = element_text(angle = 90, size = 6)) +
+  facet_grid(param ~ tbsp.clust, scales = "free_y")
 
 ```
-
-
-Filled values in the heatmap represent proportions of bins per movement parameter based on the MAP value assignments of behavior. This behavior primarily defined by long step lengths, low turning angles, and high turning angle autocorrelation (as determined from the mean of the posterior distribution of $\theta$). This would likely be classified as a 'directed' or 'transit' behavior.
+\hfill\break
+\hfill\break
+\hfill\break
 \hfill\break
 
 
-```{r}
-#plot b2 (Exploratory; intermediate SL, varied TA, intermediate TAA)
-ggplot() +
-  geom_tile(data=b2, aes(x=as.factor(behav.seg), y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_discrete(expand = c(0,0)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5)), color = "white", size = 0.35) +
-  labs(x = "Time Segment", y = "Behavior Profile", title = "Behavior 2") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-```
-
-```{r}
-#plot distributions
-theta1.b2<- data.frame(value = theta1[2,])
-theta1.b2$bin<- 1:8
-theta2.b2<- data.frame(value = theta2[2,])
-theta2.b2$bin<- 1:6
-theta3.b2<- data.frame(value = c(1 - theta3[2,], theta3[2,]))
-theta3.b2$bin<- c("n0", "n1")
-
-ta2<- ggplot(data=theta1.b2, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-sl2<- ggplot(data=theta2.b2, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "SL bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-taa2<- ggplot(data=theta3.b2, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TAA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-plot_grid(ta2, sl2, taa2, nrow = 1, labels = "")
-
-```
-
-
-The second behavior still has some long step lengths (> 10%), but mainly smaller step lengths, high turning angles, and high turning angle autocorrelation (as determined from the mean of the posterior distribution of $\theta$). This would likely be classified as an 'exploratory' behavior.
-\hfill\break
-
-
-```{r}
-#plot b3 (Encamped, very low SL, TA near pi, intermediate TAA)
-ggplot() +
-  geom_tile(data=b3, aes(x=as.factor(behav.seg), y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_discrete(expand = c(0,0)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5)), color = "white", size = 0.35) +
-  labs(x = "Time Segment", y = "Behavior Profile", title = "Behavior 3") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-```
-
-```{r}
-#plot distributions
-theta1.b3<- data.frame(value = theta1[3,])
-theta1.b3$bin<- 1:8
-theta2.b3<- data.frame(value = theta2[3,])
-theta2.b3$bin<- 1:6
-theta3.b3<- data.frame(value = c(1 - theta3[3,], theta3[3,]))
-theta3.b3$bin<- c("n0", "n1")
-
-ta3<- ggplot(data=theta1.b3, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-sl3<- ggplot(data=theta2.b3, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "SL bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-taa3<- ggplot(data=theta3.b3, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TAA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-plot_grid(ta3, sl3, taa3, nrow = 1, labels = "")
-
-```
-
-
-The third behavior is much different from the first two, displaying >90% of step lengths within the first bin (smallest SL), ~50% of turning angles near $-\pi/\pi$, and turning angle autocorrelation remaining similar to the other behaviors. Therefore, this behavior represents an 'encamped' or 'resting' behavior.
-\hfill\break
-
-
-```{r}
-#plot b4 (ARS, mainly low SL, varied TA, relatively high TAA)
-ggplot() +
-  geom_tile(data=b4, aes(x=as.factor(behav.seg), y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_discrete(expand = c(0,0)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5)), color = "white", size = 0.35) +
-  labs(x = "Time Segment", y = "Behavior Profile", title = "Behavior 4") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-```
-
-```{r}
-#plot distributions
-theta1.b4<- data.frame(value = theta1[4,])
-theta1.b4$bin<- 1:8
-theta2.b4<- data.frame(value = theta2[4,])
-theta2.b4$bin<- 1:6
-theta3.b4<- data.frame(value = c(1 - theta3[4,], theta3[4,]))
-theta3.b4$bin<- c("n0", "n1")
-
-ta4<- ggplot(data=theta1.b4, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-sl4<- ggplot(data=theta2.b4, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "SL bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-taa4<- ggplot(data=theta3.b4, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TAA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-plot_grid(ta4, sl4, taa4, nrow = 1, labels = "")
-
-```
-
-The fourth behavior is similar to the second ('exploratory'), but differs in that there are a greater proportion of steps drawn from the first and last bins. While outwardly very similar, this behavior will tentatively referred to as 'area restricted search' (ARS).
-\hfill\break
-
-
-```{r}
-#plot b5 (Encamped/Resting2?, mainly low SL, TA closer to pi, relatively high TAA)
-ggplot() +
-  geom_tile(data=b5, aes(x=as.factor(behav.seg), y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_discrete(expand = c(0,0)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5)), color = "white", size = 0.35) +
-  labs(x = "Time Segment", y = "Behavior Profile", title = "Behavior 5") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-```
-
-```{r}
-#plot distributions
-theta1.b5<- data.frame(value = theta1[5,])
-theta1.b5$bin<- 1:8
-theta2.b5<- data.frame(value = theta2[5,])
-theta2.b5$bin<- 1:6
-theta3.b5<- data.frame(value = c(1 - theta3[5,], theta3[5,]))
-theta3.b5$bin<- c("n0", "n1")
-
-ta5<- ggplot(data=theta1.b5, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-sl5<- ggplot(data=theta2.b5, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "SL bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-taa5<- ggplot(data=theta3.b5, aes(x=bin, y=value)) +
-  geom_bar(stat = 'identity') +
-  labs(x = "TAA bin", y = "Proportion") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 16), axis.text = element_text(size = 14))
-
-plot_grid(ta5, sl5, taa5, nrow = 1, labels = "")
-
-```
-
-The last behavior appeared to show many of the same characteristics as behavior 3 (encamped/resting), however the proportion of step lengths from bin 2 was ~20% for the fifth behavior. Therefore, it is expected that this behavior is mostly an extension of behavior 3 or possibly encompassing one or two other behaviors.
 
 
 ## Time series of behavior by ID
 
-Now that the behaviors have been roughly defined, I will now show how this looks over time per individual. This will provide a better sense of the transitions between behaviors and how long each ID spends in certain behaviors. Additionally, plots that display the proportion of behaviors assigned to a given time segment (from the posterior of the *z's*) will be shown to provide a measure of the uncertainty associated with the behavioral assignments from the MAP value.
+Now that the behaviors have been roughly defined, I will now show how this looks over time across all individuals. This will provide a better sense of the transitions between behaviors and how long each ID spends in certain behaviors. These plots will be aligned by first observation as well as by date to give a sense of movement patterns as snail kites get older and how this relates to peak breeding season (March 1 to June 30). Additionally, plots that display the proportion of behaviors assigned to a given time segment (from the posterior of the *z's*) will be shown to provide a measure of the uncertainty associated with the behavioral assignments from the MAP value.
 
 ```{r}
 ## Separate by ID Showing Time Series
@@ -401,6 +172,25 @@ obs.prop.list.long<- lapply(obs.prop.list.long, function(x) {mutate_at(x, "key",
 time<- lapply(obs.prop.list, function(x) data.frame(time = 1:nrow(x))) %>% map_dfr(`[`)
 tbsp.clust.time<- tbsp.clust %>% slice(rep(1:n(), times = n)) %>%
   mutate(time = time[,1]) %>% mutate(id = dat$id)
+
+
+
+# All IDs
+
+tbsp.clust.time$tbsp.clust<- factor(tbsp.clust.time$tbsp.clust,
+                                    labels = c("Transit","Exploratory","Resting","ARS","Resting2"))
+tbsp.clust.time$tbsp.clust<- factor(tbsp.clust.time$tbsp.clust,
+                                    levels(tbsp.clust.time$tbsp.clust)[c(1:2,4:5,3)], ordered = T)
+tbsp.clust.time$id<- factor(tbsp.clust.time$id)
+tbsp.clust.time$date<- dat$ESTtime %>% as_datetime()
+
+#Window of peak breeding (March 1 - June 30)
+breed<- data.frame(xmin = as_datetime(c("2016-03-01 00:00:00","2017-03-01 00:00:00",
+                                        "2018-03-01 00:00:00","2019-03-01 00:00:00")),
+                   xmax = as_datetime(c("2016-06-30 23:59:59","2017-06-30 23:59:59",
+                                        "2018-06-30 23:59:59","2019-06-30 23:59:59")),
+                   ymin = -Inf, ymax = Inf)
+
 
 
 ## Show Proportion of Behaviors Associated with Each Time Segment (from posterior)
@@ -429,48 +219,38 @@ z.post.list.long<- lapply(z.post.list.long,
 ```
 
 ```{r}
-# ID 1
-
-#generate boxes denoting clusters
-rect.lims1<- rle(tbsp.clust.time[tbsp.clust.time$id == 1, "tbsp.clust"])
-rect.lims1$lengths<- cumsum(rect.lims1$lengths)+0.5
-rect.lims1$lengths<- c(0.5, rect.lims1$lengths)
-
-rect.lims1.new<- matrix(0, length(rect.lims1$values), 3)
-for (i  in 2:length(rect.lims1$lengths)) {
-  rect.lims1.new[i-1,]<- c(rect.lims1$lengths[i-1], rect.lims1$lengths[i], rect.lims1$values[i-1])
-}
-colnames(rect.lims1.new)<- c("xmin","xmax","tbsp.clust")
-rect.lims1.new<- data.frame(rect.lims1.new)
-rect.lims1.new$tbsp.clust<- factor(rect.lims1.new$tbsp.clust,
-                                    labels = c("Transit","Exploratory","Resting","ARS","Resting2"))
-rect.lims1.new$tbsp.clust<- factor(rect.lims1.new$tbsp.clust,
-                                    levels(rect.lims1.new$tbsp.clust)[c(1:2,4:5,3)], ordered = T)
-
-
-
+#Aligned by first observation
 ggplot() +
-  geom_tile(data=obs.prop.list.long[[1]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
+  geom_tile(data=tbsp.clust.time, aes(x=time, y=id, fill=tbsp.clust)) +
+  scale_fill_viridis_d("Behavior", direction = -1) +
   scale_y_discrete(expand = c(0,0)) +
   scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims1.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims1.new, aes(xmin = xmin, xmax = xmax,
-                                    ymin = max(as.integer(obs.prop.list.long[[1]]$key)) + 0.5,
-                                    ymax = max(as.integer(obs.prop.list.long[[1]]$key)) + 1,
-                                    fill = as.factor(tbsp.clust)), color = NA, size = 1.5) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile", title = "ID 1") +
+  labs(x = "Time", y = "ID") +
   theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16),
-        plot.title = element_text(size = 18))
+  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
+```
 
+```{r}
+#Aligned by date
+ggplot() +
+  geom_rect(data = breed, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            fill = "grey", alpha = 0.5) +
+  geom_tile(data=tbsp.clust.time, aes(x=date, y=id, fill=tbsp.clust)) +
+  scale_fill_viridis_d("Behavior", direction = -1) +
+  scale_y_discrete(expand = c(0,0)) +
+  scale_x_datetime(expand = c(0,0)) +
+  labs(x = "Time", y = "ID") +
+  theme_bw() +
+  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
+```
+
+
+```{r posterior z}
+# ID 1
 
 ggplot() +
   geom_area(data=z.post.list.long[[1]], aes(x=time, y=value, fill=as.factor(key))) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)) +
+  scale_fill_viridis_d("Behavior", direction = -1) +
   scale_y_continuous(expand = c(0,0)) +
   scale_x_continuous(expand = c(0,0)) +
   labs(x = "Time", y = "Proportion of Behavior") +
@@ -479,158 +259,8 @@ ggplot() +
 ```
 
 
-```{r}
-# ID 12
 
-#generate boxes denoting clusters
-rect.lims12<- rle(tbsp.clust.time[tbsp.clust.time$id == 12, "tbsp.clust"])
-rect.lims12$lengths<- cumsum(rect.lims12$lengths)+0.5
-rect.lims12$lengths<- c(0.5, rect.lims12$lengths)
-
-rect.lims12.new<- matrix(0, length(rect.lims12$values), 3)
-for (i  in 2:length(rect.lims12$lengths)) {
-  rect.lims12.new[i-1,]<- c(rect.lims12$lengths[i-1], rect.lims12$lengths[i],
-                            rect.lims12$values[i-1])
-}
-colnames(rect.lims12.new)<- c("xmin","xmax","tbsp.clust")
-rect.lims12.new<- data.frame(rect.lims12.new)
-rect.lims12.new$tbsp.clust<- factor(rect.lims12.new$tbsp.clust,
-                                    labels = c("Transit","Exploratory","Resting","Resting2"))
-rect.lims12.new$tbsp.clust<- factor(rect.lims12.new$tbsp.clust,
-                                    levels(rect.lims12.new$tbsp.clust)[c(1:2,4:3)], ordered = T)
-
-
-ggplot() +
-  geom_tile(data=obs.prop.list.long[[2]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims1.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims12.new, aes(xmin = xmin, xmax = xmax,
-                                    ymin = max(as.integer(obs.prop.list.long[[2]]$key)) + 0.5,
-                                    ymax = max(as.integer(obs.prop.list.long[[2]]$key)) + 1,
-                                    fill = as.factor(tbsp.clust)), color = NA, size = 1.5) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)[c(1:2,4:5)]) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile", title = "ID 12") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16),
-        plot.title = element_text(size = 18))
-
-
-ggplot() +
-  geom_area(data=z.post.list.long[[2]], aes(x=time, y=value, fill=as.factor(key))) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)) +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  labs(x = "Time", y = "Proportion of Behavior") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-```
-
-
-```{r}
-# ID 19
-
-#generate boxes denoting clusters
-rect.lims19<- rle(tbsp.clust.time[tbsp.clust.time$id == 19, "tbsp.clust"])
-rect.lims19$lengths<- cumsum(rect.lims19$lengths)+0.5
-rect.lims19$lengths<- c(0.5, rect.lims19$lengths)
-
-rect.lims19.new<- matrix(0, length(rect.lims19$values), 3)
-for (i  in 2:length(rect.lims19$lengths)) {
-  rect.lims19.new[i-1,]<- c(rect.lims19$lengths[i-1], rect.lims19$lengths[i],
-                            rect.lims19$values[i-1])
-}
-colnames(rect.lims19.new)<- c("xmin","xmax","tbsp.clust")
-rect.lims19.new<- data.frame(rect.lims19.new)
-rect.lims19.new$tbsp.clust<- factor(rect.lims19.new$tbsp.clust,
-                                    labels = c("Transit","Exploratory","Resting","ARS"))
-rect.lims19.new$tbsp.clust<- factor(rect.lims19.new$tbsp.clust,
-                                    levels(rect.lims19.new$tbsp.clust)[c(1:2,4:3)], ordered = T)
-
-
-ggplot() +
-  geom_tile(data=obs.prop.list.long[[3]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims1.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims19.new, aes(xmin = xmin, xmax = xmax,
-                                    ymin = max(as.integer(obs.prop.list.long[[3]]$key)) + 0.5,
-                                    ymax = max(as.integer(obs.prop.list.long[[3]]$key)) + 1,
-                                    fill = as.factor(tbsp.clust)), color = NA, size = 1.5) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)[c(1:3,5)]) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile", title = "ID 19") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16),
-        plot.title = element_text(size = 18))
-
-
-ggplot() +
-  geom_area(data=z.post.list.long[[3]], aes(x=time, y=value, fill=as.factor(key))) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)) +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  labs(x = "Time", y = "Proportion of Behavior") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-```
-
-
-```{r}
-# ID 27
-
-#generate boxes denoting clusters
-rect.lims27<- rle(tbsp.clust.time[tbsp.clust.time$id == 27, "tbsp.clust"])
-rect.lims27$lengths<- cumsum(rect.lims27$lengths)+0.5
-rect.lims27$lengths<- c(0.5, rect.lims27$lengths)
-
-rect.lims27.new<- matrix(0, length(rect.lims27$values), 3)
-for (i  in 2:length(rect.lims27$lengths)) {
-  rect.lims27.new[i-1,]<- c(rect.lims27$lengths[i-1], rect.lims27$lengths[i],
-                            rect.lims27$values[i-1])
-}
-colnames(rect.lims27.new)<- c("xmin","xmax","tbsp.clust")
-rect.lims27.new<- data.frame(rect.lims27.new)
-rect.lims27.new$tbsp.clust<- factor(rect.lims27.new$tbsp.clust,
-                                    labels = c("Resting","ARS"))
-rect.lims27.new$tbsp.clust<- factor(rect.lims27.new$tbsp.clust,
-                                    levels(rect.lims27.new$tbsp.clust)[c(2:1)], ordered = T)
-
-
-ggplot() +
-  geom_tile(data=obs.prop.list.long[[4]], aes(x=time, y=key, fill=value)) +
-  scale_fill_viridis_c("Proportion") +
-  scale_y_discrete(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  new_scale_fill() +
-  # geom_vline(data = rect.lims1.new, aes(xintercept = xmin), color = "white", size = 0.35) +
-  geom_rect(data=rect.lims27.new, aes(xmin = xmin, xmax = xmax,
-                                    ymin = max(as.integer(obs.prop.list.long[[4]]$key)) + 0.5,
-                                    ymax = max(as.integer(obs.prop.list.long[[4]]$key)) + 1,
-                                    fill = as.factor(tbsp.clust)), color = NA, size = 1.5) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)[c(3,5)]) +
-  geom_hline(aes(yintercept = c(8.5, 14.5, 15.5)), color = "white", size = 0.5) +
-  labs(x = "Time", y = "Behavior Profile", title = "ID 27") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16),
-        plot.title = element_text(size = 18))
-
-
-ggplot() +
-  geom_area(data=z.post.list.long[[4]], aes(x=time, y=value, fill=as.factor(key))) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)) +
-  scale_y_continuous(expand = c(0,0)) +
-  scale_x_continuous(expand = c(0,0)) +
-  labs(x = "Time", y = "Proportion of Behavior") +
-  theme_bw() +
-  theme(axis.title = element_text(size = 18), axis.text = element_text(size = 16))
-```
-
+\pagebreak
 
 ## Maps of behavioral assignments by ID
 
@@ -646,8 +276,8 @@ usa <- ne_states(country = "United States of America", returnclass = "sf")
 fl<- usa %>% filter(name == "Florida")
 fl<- st_transform(fl, crs = "+init=epsg:32617") #change projection to UTM 17N
 
-tbsp.clust.time$tbsp.clust<- as.factor(tbsp.clust.time$tbsp.clust)
-levels(tbsp.clust.time$tbsp.clust)<- c("Transit","Exploratory","Resting","ARS","Resting2")
+# tbsp.clust.time$tbsp.clust<- as.factor(tbsp.clust.time$tbsp.clust)
+# levels(tbsp.clust.time$tbsp.clust)<- c("Transit","Exploratory","Resting","ARS","Resting2")
 
 dat.list$`1`$behav<- tbsp.clust.time[tbsp.clust.time$id == 1, "tbsp.clust"]
 dat.list$`12`$behav<- tbsp.clust.time[tbsp.clust.time$id == 12, "tbsp.clust"]
@@ -665,7 +295,7 @@ ggplot() +
            ylim = c(min(dat$utmlat-20000), max(dat$utmlat+20000)), expand = FALSE) +
   geom_path(data = dat, aes(x=utmlong, y=utmlat), color="gray60", size=0.25) +
   geom_point(data = dat, aes(utmlong, utmlat, fill=behav), size=2.5, pch=21, alpha=0.7) +
-  scale_fill_manual("Behavior", values = ocean.amp(5)) +
+  scale_fill_viridis_d("Behavior", direction = -1) +
   labs(x = "Longitude", y = "Latitude") +
   theme_bw() +
   facet_wrap(~id)
